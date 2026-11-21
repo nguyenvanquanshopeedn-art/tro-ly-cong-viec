@@ -1,0 +1,208 @@
+
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#176b55">
+<title>Trợ Lý Công Việc Mỗi Ngày</title>
+<link rel="manifest" href="manifest.json">
+<style>
+*{box-sizing:border-box}
+body{margin:0;padding:16px;background:#f1f5f3;color:#18352c;font-family:Arial,sans-serif}
+header,.card{background:white;border-radius:14px;padding:16px;margin-bottom:14px}
+header{background:#176b55;color:white}
+h1{font-size:23px;margin:0 0 7px}
+h2{font-size:17px;margin:0 0 13px}
+input,textarea,button{font:inherit}
+input[type=text],input[type=date],textarea{width:100%;padding:10px;border:1px solid #ccd9d2;border-radius:8px;margin:5px 0}
+textarea{min-height:55px}
+button{padding:11px;border:0;border-radius:8px;background:#176b55;color:white;font-weight:bold}
+button.secondary{background:#e4eee9;color:#176b55}
+.goal,.task{display:flex;gap:9px;align-items:center;margin:9px 0}
+.goal input[type=text],.task input[type=text]{flex:1;min-width:0}
+.slot{border-bottom:1px solid #e3eae6;padding:10px 0}
+.slottop{display:flex;justify-content:space-between;gap:8px;font-weight:bold}
+.slot label{font-size:12px;color:#547166}
+.slot input[type=time]{padding:7px;border:1px solid #ccd9d2;border-radius:7px}
+.muted{color:#678075;font-size:13px}
+.bar{height:9px;background:#e4eee9;border-radius:10px;overflow:hidden}
+#progress{height:100%;background:#176b55;width:0}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.actions button{flex:1}
+</style>
+</head>
+<body>
+<header>
+<h1>📅 Trợ Lý Công Việc Mỗi Ngày</h1>
+<div>Quản lý thời gian – Hoàn thành mục tiêu</div>
+</header>
+
+<section class="card">
+<h2>Ngày làm việc</h2>
+<input type="date" id="date">
+<div class="muted" id="weekday"></div>
+</section>
+
+<section class="card">
+<h2>1. Năm mục tiêu chính</h2>
+<div id="goals"></div>
+</section>
+
+<section class="card">
+<h2>2. Lịch làm việc 04:00 – 23:00</h2>
+<div class="muted">Đánh dấu khi hoàn thành từng công việc.</div>
+<p id="count">0/19 khung giờ</p>
+<div class="bar"><div id="progress"></div></div>
+<div id="schedule"></div>
+</section>
+
+<section class="card">
+<h2>3. Báo thức và nhắc việc</h2>
+<p class="muted">Bật báo giờ tự động để nhắc đầu mỗi giờ có công việc. Bạn cũng có thể đặt giờ riêng cho từng khung giờ.</p>
+<label><input type="checkbox" id="autoAlarm"> Bật báo giờ tự động</label>
+<p><button id="permission">Cho phép thông báo</button></p>
+<p class="muted" id="alarmStatus">Chưa bật báo giờ.</p>
+<p><button class="secondary" id="testSound">Thử chuông báo</button></p>
+</section>
+
+<section class="card">
+<h2>4. Tổng kết cuối ngày</h2>
+<textarea id="review" placeholder="Hôm nay bạn đã làm được gì?"></textarea>
+<h2>Việc cần làm ngày mai</h2>
+<div id="tomorrow"></div>
+</section>
+
+<section class="card">
+<h2>Thống kê</h2>
+<div id="stats">0/5 mục tiêu hoàn thành</div>
+</section>
+
+<div class="actions">
+<button id="save">Lưu dữ liệu</button>
+<button class="secondary" id="print">In lịch</button>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const today=()=>{
+ const d=new Date();
+ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+};
+let data;
+function blank(){
+ return {
+ goals:Array.from({length:5},()=>({text:'',done:false})),
+ slots:Array.from({length:19},()=>({text:'',note:'',done:false,alarm:''})),
+ review:'',
+ tomorrow:['','','']
+ };
+}
+$('date').value=today();
+function key(){return 'tro-ly-'+$('date').value}
+function load(){
+ try{data=JSON.parse(localStorage.getItem(key()))||blank()}catch(e){data=blank()}
+ while(data.goals.length<5)data.goals.push({text:'',done:false});
+ while(data.slots.length<19)data.slots.push({text:'',note:'',done:false,alarm:''});
+ draw();
+}
+function save(){
+ localStorage.setItem(key(),JSON.stringify(data));
+ updateStats();
+ $('weekday').textContent=new Date($('date').value+'T12:00:00').toLocaleDateString('vi-VN',{weekday:'long'});
+}
+function draw(){
+ $('goals').innerHTML='';
+ data.goals.forEach((g,i)=>{
+ const d=document.createElement('div');d.className='goal';
+ d.innerHTML=`<b>${i+1}.</b><input type="text" placeholder="Mục tiêu quan trọng..." value="${safe(g.text)}"><input type="checkbox" ${g.done?'checked':''}>`;
+ const [input,check]=d.querySelectorAll('input');
+ input.oninput=()=>{g.text=input.value;save()};
+ check.onchange=()=>{g.done=check.checked;save()};
+ $('goals').append(d);
+ });
+ $('schedule').innerHTML='';
+ data.slots.forEach((s,i)=>{
+ const hour=String(i+4).padStart(2,'0');
+ const d=document.createElement('div');d.className='slot';
+ d.innerHTML=`<div class="slottop"><span>${hour}:00 – ${String(i+5).padStart(2,'0')}:00</span><label><input type="checkbox" ${s.done?'checked':''}> Hoàn thành</label></div>
+ <textarea placeholder="Nội dung công việc...">${safe(s.text)}</textarea>
+ <input type="text" placeholder="Ghi chú / kết quả..." value="${safe(s.note)}">
+ <div class="muted">Giờ nhắc riêng: <input type="time" value="${safe(s.alarm)}"></div>`;
+ const fields=d.querySelectorAll('input,textarea');
+ fields[0].onchange=()=>{s.done=fields[0].checked;save()};
+ fields[1].oninput=()=>{s.text=fields[1].value;save()};
+ fields[2].oninput=()=>{s.note=fields[2].value;save()};
+ fields[3].onchange=()=>{s.alarm=fields[3].value;save()};
+ $('schedule').append(d);
+ });
+ $('review').value=data.review;
+ $('review').oninput=()=>{data.review=$('review').value;save()};
+ $('tomorrow').innerHTML='';
+ data.tomorrow.forEach((v,i)=>{
+ const input=document.createElement('input');
+ input.type='text';input.placeholder='Ưu tiên '+(i+1);input.value=v;
+ input.oninput=()=>{data.tomorrow[i]=input.value;save()};
+ $('tomorrow').append(input);
+ });
+ $('autoAlarm').checked=localStorage.getItem('autoAlarm')==='true';
+ updateStats();save();
+}
+function updateStats(){
+ const done=data.slots.filter(x=>x.done).length;
+ const goals=data.goals.filter(x=>x.done).length;
+ $('count').textContent=done+'/19 khung giờ hoàn thành';
+ $('progress').style.width=(done/19*100)+'%';
+ $('stats').textContent=goals+'/5 mục tiêu hoàn thành';
+}
+function safe(v){
+ return String(v||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+$('date').onchange=load;
+$('save').onclick=()=>{save();alert('Đã lưu lịch làm việc!')};
+$('print').onclick=()=>window.print();
+$('autoAlarm').onchange=()=>{
+ localStorage.setItem('autoAlarm',$('autoAlarm').checked);
+ $('alarmStatus').textContent=$('autoAlarm').checked?'Đã bật nhắc đầu giờ khi ứng dụng đang mở.':'Đã tắt báo giờ tự động.';
+};
+$('permission').onclick=async()=>{
+ if(!('Notification'in window)){alert('Trình duyệt không hỗ trợ thông báo.');return}
+ const p=await Notification.requestPermission();
+ $('alarmStatus').textContent=p==='granted'?'Đã cấp quyền thông báo.':'Chưa cấp quyền thông báo.';
+};
+let lastAlarm='';
+function beep(){
+ try{
+ const ctx=new (window.AudioContext||window.webkitAudioContext)();
+ const osc=ctx.createOscillator(),gain=ctx.createGain();
+ osc.connect(gain);gain.connect(ctx.destination);
+ osc.frequency.value=880;gain.gain.value=.15;
+ osc.start();osc.stop(ctx.currentTime+.5);
+ }catch(e){}
+}
+function alertUser(message){
+ beep();
+ if('Notification'in window&&Notification.permission==='granted')
+ new Notification('Trợ Lý Công Việc',{body:message});
+}
+setInterval(()=>{
+ if(document.hidden)return;
+ const now=new Date();
+ const hm=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+ const stamp=today()+' '+hm;
+ if(stamp===lastAlarm)return;
+ if($('autoAlarm').checked&&now.getMinutes()===0){
+ const s=data.slots[now.getHours()-4];
+ if(s&&s.text.trim()){alertUser('Đến giờ: '+s.text);lastAlarm=stamp;return}
+ }
+ const match=data.slots.find(s=>s.alarm===hm&&s.text.trim());
+ if(match){alertUser('Nhắc việc: '+match.text);lastAlarm=stamp}
+},5000);
+$('testSound').onclick=()=>{beep();alert('Đã thử âm thanh. Hãy kiểm tra âm lượng điện thoại.')};
+if('serviceWorker'in navigator){
+ window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+}
+load();
+</script>
+</body>
+</html>
