@@ -1,0 +1,14 @@
+
+{
+  "name": "Tro Ly Cong Viec Moi Ngay",
+  "short_name": "Tro Ly Cong Viec",
+  "description": "Ung dung quan ly lich lam viec hang ngay",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f1f5f3",
+  "theme_color": "#176b55",
+  "lang": "vi",
+  "icons": []
+}
